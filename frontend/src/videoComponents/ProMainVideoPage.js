@@ -12,6 +12,7 @@ import createPeerConnection from "../webRTCutilities/createPeerConnection";
 import socket from "../webRTCutilities/socketConnection";
 import updateCallStatus from "../redux-elements/actions/updateCallStatus";
 import socketConnection from "../webRTCutilities/socketConnection";
+import proSocketListeners from "../webRTCutilities/proSocketListeners";
 
 function ProMainVideoPage() {
   const dispatch = useDispatch();
@@ -44,9 +45,16 @@ function ProMainVideoPage() {
         const { peerConnection, remoteStream } = await createPeerConnection(
           addIce
         );
-        stream
-          .getTracks()
-          .forEach((track) => peerConnection.addTrack(track, stream));
+        stream.getTracks().forEach((track) => {
+          const alreadyAdded = peerConnection
+            .getSenders()
+            .find((s) => s.track && s.track.id === track.id);
+          if (!alreadyAdded) {
+            peerConnection.addTrack(track, stream);
+          } else {
+            console.log("Track zaten eklenmiş:", track);
+          }
+        });
 
         //We don't know 'who' we are talking to for now
         dispatch(addStream("remote1", remoteStream, peerConnection)); //then we will update it dynamically when we know
@@ -54,6 +62,7 @@ function ProMainVideoPage() {
         //make an offer, we ned SDP, info about feed
         //also we have No tracks yet
         //socket.emit.....
+        largeFeedEL.current.srcObject = remoteStream;
       } catch (err) {
         console.log(err);
       }
@@ -85,7 +94,7 @@ function ProMainVideoPage() {
     if (streams.remote1 && !haveGotIce) {
       setHaveGotIce(true);
       getIceAsync();
-      streamsRef.current = streams; //streamsRef oldugunu bildiğimiz az updateleme
+      streamsRef.current = streams; //streamsRef oldugunu bildiğimiz an updateleme
     }
   }, [streams]);
 
@@ -150,6 +159,24 @@ function ProMainVideoPage() {
     fetchDecodedToken();
   }, []);
 
+  useEffect(() => {
+    const token = searchParams.get("token");
+    const socket = socketConnection(token);
+    proSocketListeners.proVideoSocketListeners(socket, addIceCandidateToPc);
+  }, []);
+
+  const addIceCandidateToPc = (iceC) => {
+    //add an ice candidate from the remote to the pc
+    for (const s in streamsRef.current) {
+      if (s !== "localStream") {
+        const pc = streamsRef.current[s].peerConnection;
+        pc.addiceCandidate(iceC);
+        console.log("Existing page presence'a iceCandidate eklendi");
+        //yani professional çoktan page'teyse ekleniyo
+      }
+    }
+  };
+
   const addIce = (iceC) => {
     //emit icecandidate to the signaling server
     const socket = socketConnection(searchParams.get("token"));
@@ -194,7 +221,7 @@ function ProMainVideoPage() {
           )}
           <ChatWindow />
         </div>
-        <ActionButtons smallFeedEl={smallFeedEl} />
+        <ActionButtons smallFeedEl={smallFeedEl} largeFeedEL={largeFeedEL} />
       </div>
     </h1>
   );

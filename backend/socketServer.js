@@ -65,7 +65,7 @@ io.on("connection", (socket) => {
 
     //loop through all known offers and send out to the profs that just joined
     //the ones that belong to him/her
-    for (const s in allKnownOffers) {
+    for (const key in allKnownOffers) {
       if (allKnownOffers[key].professionalsFullName === fullName) {
         //this offer is for this pro
         io.to(socket.id).emit("newOfferWaiting", allKnownOffers[key]);
@@ -184,15 +184,30 @@ io.on("connection", (socket) => {
     // console.log(iceC);
     // console.log(uuid);
     const offerToUpdate = allKnownOffers[uuid];
+    const socketToSendTo = connectedProfessionals.find(
+      (cp) => cp.fullName === decodedData.professionalsFullName
+    );
+    if (socketToSendTo) {
+      socket.to(socketToSendTo.socketId).emit("iceToClient", iceC);
+    }
     if (offerToUpdate) {
       if (who === "client") {
         //this eans the client has sent up an iceC
         //update the offer
         offerToUpdate.offererIceCandidates.push(iceC);
+        const socketToSendTo = connectedProfessionals.find(
+          (cp) => cp.fullName === decodedData.professionalsFullName
+        );
+        if (socketToSendTo) {
+          socket.to(socketToSendTo.socketId).emit("iceToClient", iceC);
+        }
       } else if (who === "professional") {
         offerToUpdate.offererIceCandidates.push(iceC);
+        const socketToSendTo = connectedClients.find((cp) => cp.uuid == uuid);
+        if (socketToSendTo) {
+          socket.to(socketToSendTo.socketId).emit("iceToClient", iceC);
+        }
       }
-      s;
     }
   });
 });

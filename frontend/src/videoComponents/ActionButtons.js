@@ -6,7 +6,7 @@ import { useSelector } from "react-redux";
 import VideoButton from "./VideoButton/VideoButton";
 import AudioButton from "./AudioButton/AudioButton";
 
-const ActionButtons = ({ openCloseChat, smallFeedEl }) => {
+const ActionButtons = ({ openCloseChat, smallFeedEl, largeFeedEL }) => {
   const callStatus = useSelector((state) => state.callStatus); //VideoButton'a aktarılacak
 
   const menuButtons = useRef(null);
@@ -74,7 +74,7 @@ const ActionButtons = ({ openCloseChat, smallFeedEl }) => {
       </div>
 
       <div className="center justify-center text-end col-2">
-        <HangupButton />
+        <HangupButton smallFeedEl={smallFeedEl} largeFeedEL={largeFeedEL} />
       </div>
     </div>
   );

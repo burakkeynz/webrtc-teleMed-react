@@ -16,7 +16,11 @@ const ProDashboard = () => {
   useEffect(() => {
     const token = searchParams.get("token");
     const socket = socketConnection(token);
-    proSocketListeners(socket, setAppInfo, dispatch);
+    proSocketListeners.proDashboardSocketListeners(
+      socket,
+      setAppInfo,
+      dispatch
+    );
   }, []);
 
   const joinCall = (appt) => {

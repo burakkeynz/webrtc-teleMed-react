@@ -19,6 +19,18 @@ function createPeerConnection(addIce) {
         addIce(e.candidate);
       }
     });
+
+    peerConnection.addEventListener("track", (e) => {
+      console.log("Got a track fro the remote");
+      e.streams[0].getTracks().forEach((track) => {
+        remoteStream.addTrack(track, remoteStream);
+      });
+    });
+
+    resolve({
+      peerConnection,
+      remoteStream,
+    });
   });
 }
 

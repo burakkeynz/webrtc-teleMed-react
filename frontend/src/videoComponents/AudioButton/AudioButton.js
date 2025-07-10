@@ -106,6 +106,26 @@ function AudioButton({ smallFeedEl }) {
       dispatch(updateCallStatus("audioDevice", deviceId));
       dispatch(updateCallStatus("audio", "enabled"));
       dispatch(addStream("localStream", stream));
+      const [audioTrack] = stream.getAudioTracks();
+
+      for (const s in streams) {
+        if (s !== "localStream") {
+          //getSenders will grab all the RTCRtpSenders that the PC has
+          //RTCRtpSender manages how tracks are sent via the PC
+          const senders = streams[s].peerConnection.getSenders();
+          //find the sender that is in charge of the video track
+          const sender = senders.find((s) => {
+            if (s.track) {
+              //if this track matches the videoTrack kind, return it
+              return s.track.kind === audioTrack.kind;
+            } else {
+              return false;
+            }
+          });
+          //sender is RTCRtpSender, so it can be replace the track
+          sender.replaceTrack(audioTrack);
+        }
+      }
     }
   };
 
