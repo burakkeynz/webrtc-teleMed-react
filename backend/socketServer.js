@@ -21,7 +21,7 @@ const allKnownOffers = {
 };
 
 io.on("connection", (socket) => {
-  console.log(socket.id, "has connected");
+  console.log("[BACKEND] Yeni bağlantı:", socket.id);
 
   //console.log(offer); görüntüleyemiyorum
   const handshakeData = socket.handshake.auth.jwt;
@@ -105,6 +105,8 @@ io.on("connection", (socket) => {
   console.log(connectedProfessionals);
 
   socket.on("newAnswer", ({ answer, uuid }) => {
+    console.log("[BACKEND] newAnswer alındı:", { answer, uuid });
+
     // console.log(answer);
     // console.log(uuid);
     //BUNLARIN OUTPUTUNU DA ALAMIYORUM, BACKEND SERVERINE EMIT EDILIRKEN BIR PROBLEM OLUYOR UI TARAFINDA
@@ -121,6 +123,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("newOffer", ({ offer, apptInfo }) => {
+    console.log("[SOCKET] newOffer alındı:", offer, apptInfo);
     //offer = sdp/type, apptInfo has the uuid that we can add to allKnownOffers
     //so that, the professional can find exactly the right allKnownOffers
     allKnownOffers[apptInfo.uuid] = {
@@ -140,6 +143,7 @@ io.on("connection", (socket) => {
     const pa = professionalAppointments.find((pa) => pa.uuid === apptInfo.uuid);
     if (pa) {
       pa.waiting = true;
+      console.log("[SOCKET SERVER] pa.waiting set edildi", pa);
     }
 
     //find this particular professional so we can emit
@@ -154,6 +158,7 @@ io.on("connection", (socket) => {
       socket
         .to(socketId)
         .emit("newOfferWaiting", allKnownOffers[apptInfo.uuid]); //yukarıdaki {fullName, proId} olmadıgından [appInfo da var }]
+      console.log("[SOCKET] newOfferWaiting emit edildi, proId:", socketId);
 
       //send the updated appt info with the new waiting
       socket.to(socketId).emit(
@@ -167,19 +172,24 @@ io.on("connection", (socket) => {
 
   socket.on("getIce", (uuid, who, ackFunc) => {
     const offer = allKnownOffers[uuid];
-    // console.log(offer);
     let iceCandidates = [];
+    if (!offer) {
+      // OFFER YOKSA backend'i asla patlatma! Boş array döndür.
+      ackFunc([]);
+      return;
+    }
     if (who === "professional") {
-      iceCandidates = offer.offererIceCandidates;
+      iceCandidates = offer.offererIceCandidates || [];
     } else if (who === "client") {
-      iceCandidates = offerer.answerIceCandidates;
+      iceCandidates = offer.answerIceCandidates || [];
     }
     ackFunc(iceCandidates);
   });
 
   //socketio başka birinin asenkron sorunlarını asenkron olarak incelediğinden tam bir nightmare'a dönüşüyor buralar, iceCandidate en beteri
   socket.on("iceToServer", ({ who, iceC, uuid }) => {
-    console.log("============", who);
+    console.log("[BACKEND] iceToServer geldi:", { who, iceC, uuid });
+
     // console.log(who);
     // console.log(iceC);
     // console.log(uuid);
@@ -202,7 +212,7 @@ io.on("connection", (socket) => {
           socket.to(socketToSendTo.socketId).emit("iceToClient", iceC);
         }
       } else if (who === "professional") {
-        offerToUpdate.offererIceCandidates.push(iceC);
+        offerToUpdate.answerIceCandidates.push(iceC);
         const socketToSendTo = connectedClients.find((cp) => cp.uuid == uuid);
         if (socketToSendTo) {
           socket.to(socketToSendTo.socketId).emit("iceToClient", iceC);

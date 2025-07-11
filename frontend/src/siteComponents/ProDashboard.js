@@ -1,14 +1,13 @@
 import "./ProDashboard.css";
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import moment from "moment";
 import socketConnection from "../webRTCutilities/socketConnection";
 import proSocketListeners from "../webRTCutilities/proSocketListeners";
-import moment from "moment";
 import { useDispatch } from "react-redux";
 
 const ProDashboard = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [appInfo, setAppInfo] = useState([]);
   const dispatch = useDispatch();
@@ -21,18 +20,20 @@ const ProDashboard = () => {
       setAppInfo,
       dispatch
     );
+    // Optional cleanup:
+    return () => {
+      socket.off("appData");
+      socket.off("newOfferWaiting");
+    };
   }, []);
 
   const joinCall = (appt) => {
-    console.log(appt);
     const token = searchParams.get("token");
-    //navigate to /join-video-pro
     navigate(
       `/join-video-pro?token=${token}&uuid=${appt.uuid}&client=${appt.clientName}`
     );
   };
 
-  console.log("Test");
   return (
     <div className="container">
       <div className="row">
@@ -80,29 +81,23 @@ const ProDashboard = () => {
               <div className="col-6">
                 <div className="dash-box clients-board blue-bg">
                   <h4>Coming Appointments</h4>
-                  {appInfo.map((a) => (
-                    <div key={a.uuid}>
+                  {appInfo.length > 0 && (
+                    <div key={appInfo[0].uuid}>
                       <li className="client">
-                        {a.clientName} - {moment(a.appDate).calendar()}
-                        {a.waiting ? (
-                          <>
-                            {" "}
-                            <div className="waiting-text d-inline-block">
-                              Waiting
-                            </div>
-                            <button
-                              className="btn btn-danger join-btn"
-                              onClick={() => joinCall(a)}
-                            >
-                              Join
-                            </button>
-                          </>
-                        ) : (
-                          <></>
-                        )}
+                        {appInfo[0].clientName} -{" "}
+                        {moment(appInfo[0].apptDate).calendar()}
+                        <div className="waiting-text d-inline-block">
+                          Waiting
+                        </div>
+                        <button
+                          className="btn btn-danger join-btn"
+                          onClick={() => joinCall(appInfo[0])}
+                        >
+                          Join
+                        </button>
                       </li>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>

@@ -2,7 +2,7 @@ import peerConfiguration from "./stunServers";
 
 function createPeerConnection(addIce) {
   return new Promise(async (resolve, reject) => {
-    const peerConnection = await new RTCPeerConnection();
+    const peerConnection = await new RTCPeerConnection(peerConfiguration);
     //rtcPeerConnection is the connection to the peer
     //we may need more than one this time
     //we pass it the config object, which is stun servers
@@ -23,7 +23,7 @@ function createPeerConnection(addIce) {
     peerConnection.addEventListener("track", (e) => {
       console.log("Got a track fro the remote");
       e.streams[0].getTracks().forEach((track) => {
-        remoteStream.addTrack(track, remoteStream);
+        remoteStream.addTrack(track);
       });
     });
 

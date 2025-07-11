@@ -11,7 +11,9 @@ const initialState = {};
 export default (state = initialState, action) => {
   if (action.type === "ADD_STREAM") {
     const copyState = { ...state };
-    copyState[action.payload.who] = action.payload; //localState olacak burası, copyState['localState']
+    copyState[action.payload.who] = {
+      streamId: action.payload.streamId,
+    };
     return copyState;
   } else if (action.type === "LOGOUT_ACTION") {
     return {};

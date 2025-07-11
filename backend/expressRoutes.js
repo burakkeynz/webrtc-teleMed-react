@@ -40,7 +40,8 @@ app.get("/user-link", (req, res) => {
   // //data for the end-user's appt
   const appointmentData = professionalAppointments[0];
 
-  professionalAppointments.push(appointmentData);
+  //bunu şimdilik blokluyorum cunku array genişliyor aynı appointment eklenip eklenip duruyor
+  // professionalAppointments.push(appointmentData);
   //We need to encode this data in token, şimdilik bu projede JWT.io kullanacağım, HTTPS-cookie kısmında da JWT gibi payload eklemeyi ama cookie ile saklamayı düşünüyorum
   const token = jwt.sign(appointmentData, secretKey);
   res.send(`https://localhost:3000/join-video?token=${token}`);

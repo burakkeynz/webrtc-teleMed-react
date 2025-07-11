@@ -1,5 +1,6 @@
 import { useDispatch, useSelector } from "react-redux";
 import updateCallStatus from "../redux-elements/actions/updateCallStatus";
+import { globalStreams } from "../webRTCutilities/globalStreams";
 
 const HangupButton = ({ largeFeedEL, smallFeedEl }) => {
   const dispatch = useDispatch();
@@ -8,22 +9,24 @@ const HangupButton = ({ largeFeedEL, smallFeedEl }) => {
 
   const hangupCall = () => {
     dispatch(updateCallStatus("current", "complete"));
-    //user has clicked hang up
+
+    // Store'daki her stream'in peerConnection'unu globalStreams'ten bul ve kapat
     for (const s in streams) {
-      //loop through all streams, and if there is a pc, close it
-      //remove listeners
-      //set it to null
-      if (streams[s].peerConnection) {
-        //RTCPeerConnection close() method closes the current peer connection.
-        streams[s].peerConnection.close();
-        streams[s].peerConnection.onicecandidate = null;
-        streams[s].peerConnection.onaddstream = null;
-        streams[s].peerConnection = null;
+      const streamId = streams[s].streamId;
+      const gs = globalStreams[streamId];
+      if (gs && gs.peerConnection) {
+        gs.peerConnection.close();
+        gs.peerConnection.onicecandidate = null;
+        gs.peerConnection.onaddstream = null;
+        gs.peerConnection = null;
       }
+      // İsteğe bağlı: stream'i de kaldırabilirsin
+      // delete globalStreams[streamId];
     }
+
     //set both video tags to empty
-    smallFeedEl.current.srcObject = null;
-    largeFeedEL.current.srcObject = null;
+    if (smallFeedEl.current) smallFeedEl.current.srcObject = null;
+    if (largeFeedEL.current) largeFeedEL.current.srcObject = null;
   };
 
   if (callStatus.current === "complete") {

@@ -5,128 +5,89 @@ import getDevices from "../VideoButton/getDevices";
 import updateCallStatus from "../../redux-elements/actions/updateCallStatus";
 import addStream from "../../redux-elements/actions/addStream";
 import startAudioStream from "./startAudioStream";
+import { globalStreams } from "../../webRTCutilities/globalStreams";
+import { v4 as uuidv4 } from "uuid";
 
 function AudioButton({ smallFeedEl }) {
   const dispatch = useDispatch();
   const streams = useSelector((state) => state.streams);
+  const callStatus = useSelector((state) => state.callStatus);
   const [caretOpen, setCaretOpen] = useState(false);
   const [audioDeviceList, setAudioDeviceList] = useState([]);
 
-  const callStatus = useSelector((state) => state.callStatus);
-
-  let micText;
-  if (callStatus.audio === "off") {
-    micText = "Join Audio";
-  } else if (callStatus.audio === "enabled") {
-    micText = "Mute";
-  } else {
-    micText = "Unmute";
-  }
+  let micText =
+    callStatus.audio === "off"
+      ? "Join Audio"
+      : callStatus.audio === "enabled"
+      ? "Mute"
+      : "Unmute";
 
   useEffect(() => {
-    const getDevicesAsync = async () => {
-      if (caretOpen) {
-        const devices = await getDevices();
-        setAudioDeviceList(
-          devices.audioOutputDevices.concat(devices.audioInputDevices)
-        );
-      }
-    };
-    getDevicesAsync();
+    if (caretOpen) {
+      getDevices().then((devices) => {
+        setAudioDeviceList([
+          ...devices.audioOutputDevices,
+          ...devices.audioInputDevices,
+        ]);
+      });
+    }
   }, [caretOpen]);
 
   const startStopAudio = async () => {
-    const localStream = streams.localStream?.stream;
+    console.log("[AudioButton] Tıklandı!");
+
+    const streamId = streams.localStream?.streamId;
+    let localStream = streamId ? globalStreams[streamId]?.stream : null;
 
     if (callStatus.audio === "enabled") {
-      // Mute
+      console.log("[AudioButton] Disabling audio tracks...");
       dispatch(updateCallStatus("audio", "disabled"));
-      localStream?.getAudioTracks()?.forEach((track) => {
+      localStream?.getAudioTracks().forEach((track) => {
         track.enabled = false;
       });
-    } else if (callStatus.audio === "off" || callStatus.audio === "disabled") {
-      // Mic aç
-      if (localStream) {
-        // localStream zaten varsa → sadece track enabled yap
-        const audioTracks = localStream.getAudioTracks();
-        if (audioTracks.length > 0) {
-          audioTracks.forEach((track) => {
-            track.enabled = true;
-          });
-        } else {
-          // Eğer audio track hiç yoksa → yeni track yarat
-          const audioStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: false,
-          });
-          audioStream.getAudioTracks().forEach((track) => {
-            localStream.addTrack(track);
-          });
-        }
-      } else {
-        // localStream yoksa → mic stream oluştur
+      return;
+    }
+
+    if (!localStream) {
+      console.log("[AudioButton] No localStream. GUM çağrılıyor...");
+      try {
         const audioStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
           video: false,
         });
-        dispatch(addStream("localStream", audioStream));
+        console.log("[AudioButton] GUM audioStream:", audioStream);
+
+        const newId = uuidv4();
+        globalStreams[newId] = {
+          stream: audioStream,
+          peerConnection: null,
+        };
+        dispatch(addStream("localStream", newId)); // SADECE ID!
+        localStream = audioStream;
+      } catch (err) {
+        console.error("[AudioButton] GUM error:", err);
+        return;
       }
-
-      dispatch(updateCallStatus("audio", "enabled"));
-
-      startAudioStream(
-        {
-          ...streams,
-          localStream: {
-            stream: streams.localStream?.stream || localStream,
-          },
-        },
-        dispatch
-      );
-    }
-  };
-
-  const changeAudioDevice = async (e) => {
-    const deviceId = e.target.value.slice(5);
-    const audioType = e.target.value.slice(0, 5);
-
-    if (audioType === "output") {
-      smallFeedEl.current.setSinkId(deviceId);
-    } else if (audioType === "input") {
-      const newConstraints = {
-        audio: { deviceId: { exact: deviceId } },
-        video:
-          callStatus.videoDevice === "default"
-            ? true
-            : { deviceId: { exact: callStatus.videoDevice } },
-      };
-
-      const stream = await navigator.mediaDevices.getUserMedia(newConstraints);
-
-      dispatch(updateCallStatus("audioDevice", deviceId));
-      dispatch(updateCallStatus("audio", "enabled"));
-      dispatch(addStream("localStream", stream));
-      const [audioTrack] = stream.getAudioTracks();
-
-      for (const s in streams) {
-        if (s !== "localStream") {
-          //getSenders will grab all the RTCRtpSenders that the PC has
-          //RTCRtpSender manages how tracks are sent via the PC
-          const senders = streams[s].peerConnection.getSenders();
-          //find the sender that is in charge of the video track
-          const sender = senders.find((s) => {
-            if (s.track) {
-              //if this track matches the videoTrack kind, return it
-              return s.track.kind === audioTrack.kind;
-            } else {
-              return false;
-            }
-          });
-          //sender is RTCRtpSender, so it can be replace the track
-          sender.replaceTrack(audioTrack);
-        }
+    } else {
+      console.log("[AudioButton] Existing localStream bulundu.");
+      const audioTracks = localStream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        const audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+        audioStream.getAudioTracks().forEach((track) => {
+          localStream.addTrack(track);
+        });
+      } else {
+        audioTracks.forEach((track) => (track.enabled = true));
       }
     }
+
+    dispatch(updateCallStatus("audio", "enabled"));
+
+    // Store'a veya fonksiyona stream obje değil, id ile eriş!
+    startAudioStream(streams, dispatch);
   };
 
   return (
@@ -142,7 +103,7 @@ function AudioButton({ smallFeedEl }) {
       {caretOpen && (
         <CarretDownButton
           defaultValue={callStatus.audioDevice}
-          changeHandler={changeAudioDevice}
+          changeHandler={() => {}}
           deviceList={audioDeviceList}
           type="audio"
         />

@@ -1,22 +1,36 @@
 import updateCallStatus from "../redux-elements/actions/updateCallStatus";
 
 const proDashboardSocketListeners = (socket, setAppInfo, dispatch) => {
-  socket.on("appData", (apptData) => {
-    console.log(apptData, setAppInfo);
+  const appDataHandler = (apptData) => {
+    console.log("Gelen data:", apptData);
     setAppInfo(apptData);
-  });
-
-  socket.on("newOfferWaiting", (offerData) => {
-    //disppatch the offer to redux so that it is available for later
+  };
+  const offerHandler = (offerData) => {
+    console.log("[PRO] newOfferWaiting event:", offerData);
     dispatch(updateCallStatus("offer", offerData.offer));
     dispatch(updateCallStatus("myRole", "answerer"));
-  });
+  };
+
+  socket.on("appData", appDataHandler);
+  socket.on("newOfferWaiting", offerHandler);
+
+  // CLEANUP
+  return () => {
+    socket.off("appData", appDataHandler);
+    socket.off("newOfferWaiting", offerHandler);
+  };
 };
 
 const proVideoSocketListeners = (socket, addIceCandidateToPc) => {
-  socket.on("iceToClient", (iceC) => {
+  const iceHandler = (iceC) => {
     addIceCandidateToPc(iceC);
-  });
+  };
+
+  socket.on("iceToClient", iceHandler);
+
+  return () => {
+    socket.off("iceToClient", iceHandler);
+  };
 };
 
 export default { proDashboardSocketListeners, proVideoSocketListeners };

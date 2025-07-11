@@ -4,7 +4,8 @@ import startLocalVideoStream from "./startLocalVideoStream";
 import updateCallStatus from "../../redux-elements/actions/updateCallStatus";
 import getDevices from "./getDevices";
 import addStream from "../../redux-elements/actions/addStream";
-
+import { globalStreams } from "../../webRTCutilities/globalStreams";
+import { v4 as uuidv4 } from "uuid";
 import CarretDownButton from "../CaretDownButton";
 
 function VideoButton({ smallFeedEl }) {
@@ -32,31 +33,35 @@ function VideoButton({ smallFeedEl }) {
     //3.update videoDevice Redux, and that video is enabled
     dispatch(updateCallStatus("videoDevice", deviceId));
     dispatch(updateCallStatus("video", "enabled"));
-    //4. uptade the smallFeedEl
+    //4. update the smallFeedEl
     smallFeedEl.current.srcObject = stream;
     //5. Update the localStream in streams
-    dispatch(addStream("localStream", stream));
+    const newId = uuidv4();
+    globalStreams[newId] = {
+      stream,
+      peerConnection: null,
+    };
+    dispatch(addStream("localStream", newId));
     //6.Add tracks
     const [videoTrack] = stream.getVideoTracks();
-    //come back to this later
-    //If we stop the old tracks, and add the new tracks
-    //that will mean renegotiation RTCRtpSender
     for (const s in streams) {
       if (s !== "localStream") {
-        //getSenders will grab all the RTCRtpSenders that the PC has
-        //RTCRtpSender manages how tracks are sent via the PC
-        const senders = streams[s].peerConnection.getSenders();
-        //find the sender that is in charge of the video track
-        const sender = senders.find((s) => {
-          if (s.track) {
-            //if this track matches the videoTrack kind, return it
-            return s.track.kind === videoTrack.kind;
-          } else {
-            return false;
-          }
-        });
-        //sender is RTCRtpSender, so it can be replace the track
-        sender.replaceTrack(videoTrack);
+        const remoteStreamId = streams[s].streamId;
+        const pc = remoteStreamId
+          ? globalStreams[remoteStreamId]?.peerConnection
+          : null;
+        if (pc) {
+          const senders = pc.getSenders();
+          //find the sender that is in charge of the video track
+          const sender = senders.find((s) => {
+            if (s.track) {
+              return s.track.kind === videoTrack.kind;
+            } else {
+              return false;
+            }
+          });
+          sender?.replaceTrack(videoTrack);
+        }
       }
     }
   };
@@ -73,58 +78,68 @@ function VideoButton({ smallFeedEl }) {
     getDevicesAsync();
   }, [caretOpen]);
 
-  const startStopVideo = () => {
+  const startStopVideo = async () => {
     console.log("Sanity check.");
-    console.log("streams:", streams);
-    console.log("smallFeedEl.current:", smallFeedEl.current);
+
+    const streamId = streams.localStream?.streamId;
+    let localStream = streamId ? globalStreams[streamId]?.stream : null;
 
     if (callStatus.video === "enabled") {
       dispatch(updateCallStatus("video", "disabled"));
-      //bizim + olarak WebRTC feed'ini değiştirmemiz gerekiyor bu çünkü bu Redux update
-      const tracks = streams.localStream.stream.getVideoTracks();
+      if (smallFeedEl.current) {
+        smallFeedEl.current.srcObject = null;
+      }
+      const tracks = localStream?.getVideoTracks() || [];
       tracks.forEach((track) => {
-        track.enabled = false; //MediaStreamTrack: enabled property MDN doc başlığı, MediaStreamTrack instance'ı yani
+        track.enabled = false;
       });
-    } else if (callStatus.video === "off") {
-      // off tanımladıgımızdan bu olmalı
-      startLocalVideoStream(streams, dispatch);
+    } else {
+      if (!localStream) {
+        // GUM çağır
+        try {
+          const constraints = {
+            video: true,
+            audio: false,
+          };
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          const newId = uuidv4();
+          globalStreams[newId] = {
+            stream,
+            peerConnection: null,
+          };
+          dispatch(addStream("localStream", newId));
+          localStream = stream;
+        } catch (e) {
+          console.error("GUM çağrısı başarısız:", e);
+          return;
+        }
+      }
       dispatch(updateCallStatus("video", "enabled"));
-      // tracks varsa aç
-      const tracks = streams.localStream?.stream?.getVideoTracks();
-      tracks?.forEach((track) => {
+
+      const tracks = localStream?.getVideoTracks() || [];
+      tracks.forEach((track) => {
         track.enabled = true;
       });
 
-      // DOM'a bağla
-      if (streams.localStream?.stream) {
-        smallFeedEl.current.srcObject = streams.localStream.stream;
-      }
-    } else if (callStatus.video === "disabled") {
-      dispatch(updateCallStatus("video", "enabled"));
-      const tracks = streams.localStream.stream.getVideoTracks();
-      tracks.forEach((track) => {
-        track.enabled = true;
-      });
-    } else if (callStatus.haveMedia) {
-      //CASE3: media'nın olduğu koşulda
-      smallFeedEl.current.srcObject = streams.localStream.stream;
-      //add tracks to the peerConnections
+      smallFeedEl.current.srcObject = localStream;
+
+      // Sadece id ile çalış!
       startLocalVideoStream(streams, dispatch);
-    } else {
-      //CASE4: hızlı biçimde kameraya basmaya çalışılırsa, media yoksa durumu
-      setPendingUpdate(true);
     }
   };
 
   useEffect(() => {
     if (pendingUpdate && callStatus.haveMedia) {
       console.log(`Pending update succeeded`);
-      //bu useEffect pendinUpdate true olursa çalısacak
-      setPendingUpdate(false); //switch back to false
-      smallFeedEl.current.srcObject = streams.localStream.stream;
+      setPendingUpdate(false);
+      const streamId = streams.localStream?.streamId;
+      const localStream = streamId ? globalStreams[streamId]?.stream : null;
+      if (localStream) {
+        smallFeedEl.current.srcObject = localStream;
+      }
       startLocalVideoStream(streams, dispatch);
     }
-  }, [pendingUpdate, callStatus.haveMedia]);
+  }, [pendingUpdate, callStatus.haveMedia, streams]);
 
   return (
     <div className="button-wrapper video-button d-inline-block">
@@ -145,13 +160,9 @@ function VideoButton({ smallFeedEl }) {
           deviceList={videoDeviceList}
           type="video"
         />
-      ) : (
-        <></>
-      )}
+      ) : null}
     </div>
   );
 }
 
 export default VideoButton;
-
-//Bug Fix: SDP bağlantısı displaylenmiyor
